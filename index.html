@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            background-color: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 15px; /* Increased padding */
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            text-transform: uppercase;
+            font-size: 14px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1; /* Light grey on hover */
+        }
+
+        /* Status styling for Remaining Time */
+        .urgent {
+            background-color: #ffdddd; /* Light red */
+            color: #a00; /* Darker red text */
+            font-weight: bold;
+        }
+        .soon {
+            background-color: #fffadd; /* Light yellow */
+            color: #770; /* Darker yellow/orange text */
+        }
+        .normal {
+            background-color: #ddffdd; /* Light green */
+            color: #070; /* Darker green text */
+        }
+
+        #accountsTableBody .columnIndex,
+        #accountsTableBody .columnNotes {
+            display: none;
+        }
+
+        /* Form Styling */
+        #accountFormContainer {
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            margin-top: 30px;
+            border: 1px solid #e0e0e0;
+        }
+
+        #formTitle {
+            text-align: center;
+            color: #333;
+            margin-bottom: 25px;
+            font-size: 24px;
+        }
+
+        #accountForm label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        #accountForm input[type="text"],
+        #accountForm input[type="number"],
+        #accountForm input[type="datetime-local"],
+        #accountForm textarea {
+            width: calc(100% - 22px); /* Account for padding and border */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        
+        #accountForm textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        #formErrorMessage {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+            /* Color and background will be set dynamically if error, but hide if empty */
+            /* display: none;  -- Let JS handle display or just rely on empty text */
+        }
+         #formErrorMessage:not(:empty) { /* Only show if there's text */
+            border: 1px solid #dc3545; /* Red border */
+            background-color: #f8d7da; /* Light red background */
+            color: #721c24; /* Dark red text */
+         }
+
+
+        /* Button Styling */
+        button, .button { /* General button class for consistency */
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 8px;
+            transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            text-decoration: none; /* For anchor tags styled as buttons */
+            display: inline-block; /* For anchor tags */
+            color: white; /* Default text color for buttons */
+        }
+
+        button:hover, .button:hover {
+            opacity: 0.9;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        #addNewAccountButton {
+            background-color: #4CAF50; /* Green */
+            margin-bottom: 20px;
+        }
+        #addNewAccountButton:hover { background-color: #45a049; }
+
+        #accountsTableBody button { /* Edit buttons in table */
+            background-color: #007bff; /* Blue */
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+        #accountsTableBody button:hover { background-color: #0056b3; }
+
+        #saveAccountButton {
+            background-color: #28a745; /* Darker Green */
+        }
+        #saveAccountButton:hover { background-color: #218838; }
+
+        #calculateStarBonusTimeButton,
+        #accountForm button[type="button"]:not(#saveAccountButton) { /* Clear & Close, Calculate */
+            background-color: #6c757d; /* Grey */
+        }
+        #calculateStarBonusTimeButton:hover,
+        #accountForm button[type="button"]:not(#saveAccountButton):hover { background-color: #5a6268; }
+
+        /* Duration input fields styling */
+        #accountForm div label + div input[type="number"] { /* Target duration inputs specifically */
+            width: auto; /* Override full width for these small inputs */
+            margin-right: 5px;
+            display: inline-block;
+        }
+        #addDays { width: 70px; }
+        #addHours { width: 75px; }
+        #addMinutes { width: 85px; }
+        
+        #accountForm hr {
+            margin-top: 20px;
+            margin-bottom: 20px;
+            border: 0;
+            border-top: 1px solid #eee;
+        }
+
+        #accountForm div[style*="margin-top: 15px;"] { /* The div wrapping save/clear buttons */
+            margin-top: 20px !important; /* Ensure spacing */
+            display: flex; /* Align buttons */
+            justify-content: flex-end; /* Right-align buttons */
+        }
+        .hidden-form {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Account Dashboard</h1>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Index</th>
+                <th>Account Name</th>
+                <th>Star Bonus Time</th>
+                <th>Memo</th>
+                <th>Remaining Time</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody id="accountsTableBody">
+            <!-- Account rows will be inserted here by JavaScript -->
+        </tbody>
+        </table>
+    </div>
+
+    <button id="addNewAccountButton">Add New Account</button>
+
+    <div id="accountFormContainer" class="hidden-form">
+        <h3 id="formTitle">Add New Account</h3>
+        <p id="formErrorMessage" style="color: red;"></p>
+        <form id="accountForm">
+            <div>
+                <label for="accountIndexInput">Index:</label>
+                <input type="number" id="accountIndexInput" name="accountIndexInput" required>
+            </div>
+            <div>
+                <label for="accountNameInput">Account Name:</label>
+                <input type="text" id="accountNameInput" name="accountNameInput" required>
+            </div>
+            <div>
+                <label for="accountStarBonusTimeInput">Star Bonus Time:</label>
+                <input type="datetime-local" id="accountStarBonusTimeInput" name="accountStarBonusTimeInput">
+            </div>
+            <div>
+                <label for="accountMemoInput">Memo:</label>
+                <input type="text" id="accountMemoInput" name="accountMemoInput">
+            </div>
+            <div>
+                <label for="accountNotesInput">Notes:</label>
+                <textarea id="accountNotesInput" name="accountNotesInput" rows="3"></textarea>
+            </div>
+
+            <hr>
+            <div>
+                <label>Quick Set Star Bonus Time (adds to now):</label>
+                <div>
+                    <input type="number" id="addDays" min="0" placeholder="Days" style="width: 60px;">
+                    <input type="number" id="addHours" min="0" max="23" placeholder="Hours" style="width: 60px;">
+                    <input type="number" id="addMinutes" min="0" max="59" placeholder="Minutes" style="width: 70px;">
+                </div>
+                <button type="button" id="calculateStarBonusTimeButton" style="margin-top: 5px;">Calculate & Set Star Bonus Time</button>
+            </div>
+            <hr>
+
+            <div style="margin-top: 15px;">
+                <button type="submit" id="saveAccountButton">Save Account</button>
+                <button type="button" onclick="clearAndHideForm()">Clear & Close</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const formContainer = document.getElementById('accountFormContainer');
+        const accountForm = document.getElementById('accountForm');
+        const formErrorMessage = document.getElementById('formErrorMessage');
+        const accountIndexInput = document.getElementById('accountIndexInput');
+        const accountNameInput = document.getElementById('accountNameInput');
+        const accountStarBonusTimeInput = document.getElementById('accountStarBonusTimeInput');
+        const accountMemoInput = document.getElementById('accountMemoInput');
+        const accountNotesInput = document.getElementById('accountNotesInput');
+        const formTitle = document.getElementById('formTitle');
+
+
+        // This function is now primarily controlled from app.js for showing/populating
+        function showForm(isEditMode = false, accountData = null) {
+            formContainer.classList.remove('hidden-form'); // Or use style.display = 'block'
+            accountIndexInput.readOnly = false; // Always allow index editing, validation in app.js
+
+            if (isEditMode && accountData) {
+                formTitle.textContent = 'Edit Account';
+                accountIndexInput.value = accountData.index;
+                accountNameInput.value = accountData.accountName;
+                // Format date for datetime-local input
+                accountStarBonusTimeInput.value = accountData.starBonusTime ? accountData.starBonusTime.slice(0,16) : '';
+                accountMemoInput.value = accountData.memo;
+                accountNotesInput.value = accountData.notes;
+                // currentEditIndex will be set in app.js
+            } else {
+                formTitle.textContent = 'Add New Account';
+                accountForm.reset(); // Clear fields for new entry
+                formErrorMessage.textContent = '';
+                // currentEditIndex will be set to null in app.js
+            }
+        }
+
+        function hideForm() {
+            formContainer.classList.add('hidden-form'); // Or use style.display = 'none'
+        }
+        
+        function clearAndHideForm() { // Called by "Clear & Close" button and after successful save
+            accountForm.reset();
+            formErrorMessage.textContent = '';
+            accountIndexInput.readOnly = false; // Reset readOnly status
+            hideForm();
+            // Resetting currentEditIndex is handled in app.js
+            if (typeof window.resetCurrentEditIndex === 'function') { // Call app.js function
+                window.resetCurrentEditIndex();
+            }
+        }
+        
+        // The old toggleFormVisibility and clearFormFieldsOnly are effectively replaced or integrated.
+    </script>
+    <script src="app.js" defer></script>
+</body>
+</html>
