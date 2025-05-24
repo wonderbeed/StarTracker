@@ -207,13 +207,49 @@
         .hidden-form {
             display: none;
         }
+
+        /* Auth Container Styling */
+        #authContainer {
+            text-align: right;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        #userInfo {
+            display: inline-block; /* Keeps it on the same line as buttons if space allows */
+            margin-right: 15px;
+            font-weight: bold;
+            color: #333;
+        }
+        #authContainer button { /* Auth buttons specifically */
+            background-color: #007bff; /* Blue for login */
+            color: white;
+        }
+        #authContainer button:hover {
+            background-color: #0056b3;
+        }
+        #logoutButton {
+            background-color: #dc3545; /* Red for logout */
+        }
+        #logoutButton:hover {
+            background-color: #c82333;
+        }
+
     </style>
 </head>
 <body>
 
     <h1>Account Dashboard</h1>
 
-    <div class="table-container">
+    <div id="authContainer">
+        <div id="userInfo" style="display:none;"></div>
+        <button id="loginButton" class="button">Login with Google</button>
+        <button id="logoutButton" class="button" style="display:none;">Logout</button>
+    </div>
+
+    <div class="table-container" style="display:none;"> <!-- Initially hide table -->
         <table>
             <thead>
                 <tr>
@@ -229,9 +265,9 @@
         </table>
     </div>
 
-    <button id="addNewAccountButton">Add New Account</button>
+    <button id="addNewAccountButton" style="display:none;">Add New Account</button> <!-- Initially hide button -->
 
-    <div id="accountFormContainer" class="hidden-form">
+    <div id="accountFormContainer" class="hidden-form"> <!-- Already hidden by class -->
         <h3 id="formTitle">Add New Account</h3>
         <p id="formErrorMessage" style="color: red;"></p>
         <form id="accountForm">
@@ -330,6 +366,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <!-- End Firebase SDK -->
 
     <script src="app.js" defer></script>

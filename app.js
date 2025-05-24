@@ -12,9 +12,21 @@ const firebaseConfig = {
 // Firestore instance
 let db;
 
+// User State
+let currentUserUID = null;
+let currentUserEmail = null;
+
 // Initialize an empty array to store account objects
 let accountsData = [];
 let currentEditIndex = null; // Used to track if we are editing an existing account (Firestore doc ID)
+
+// DOM elements for Auth and main content
+let loginButton;
+let logoutButton;
+let userInfoDiv;
+let accountFormContainer; // The form container
+let mainTableContainer; // The div wrapping the table
+let addNewAccountButtonElem; // Reference to the "Add New Account" button
 
 /**
  * Structure of an account object (in-memory representation):
@@ -33,15 +45,61 @@ window.resetCurrentEditIndex = () => {
     currentEditIndex = null;
 };
 
+function signInWithGoogle() {
+    if (!firebase || !firebase.auth) {
+        console.error("Firebase Auth SDK not loaded or initialized properly.");
+        alert("Authentication service is not available. Please try again later.");
+        return;
+    }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider)
+        .then((result) => {
+            const user = result.user;
+            console.log('User logged in via signInWithPopup:', user.displayName, user.email);
+            // onAuthStateChanged will handle UI updates and data loading
+        })
+        .catch((error) => {
+            console.error('Google Sign-In Error:', error);
+            alert('Login failed: ' + error.message + ' (Code: ' + error.code + ')');
+        });
+}
+
+function signOutUser() {
+    if (!firebase || !firebase.auth) {
+        console.error("Firebase Auth SDK not loaded or initialized properly.");
+        alert("Authentication service is not available. Please try again later.");
+        return;
+    }
+    firebase.auth().signOut()
+        .then(() => {
+            console.log('User signed out successfully via signOutUser.');
+            // onAuthStateChanged will handle UI updates and data clearing
+        })
+        .catch((error) => {
+            console.error('Sign-Out Error:', error);
+            alert('Logout failed: ' + error.message);
+        });
+}
+
+
 function loadAccountsFromFirestore() {
     if (!db) {
         console.error("Firestore instance (db) not available. Cannot load accounts.");
-        alert("Error: Database connection not available. Please try refreshing.");
+        // This function is now called by onAuthStateChanged, so db should be available if user is logged in.
+        // If it's not, it's a more fundamental issue than just not being logged in.
         accountsData = []; 
         renderAccounts();
         return; 
     }
+    if (!currentUserUID) {
+        console.log("No user logged in. Not loading accounts.");
+        accountsData = [];
+        renderAccounts();
+        return;
+    }
 
+    // Firestore data loading will be user-specific in a later task.
+    // For now, it loads from a general 'accounts' collection.
     db.collection('accounts').get()
         .then(querySnapshot => {
             const loadedAccounts = [];
@@ -159,7 +217,7 @@ function renderAccounts() {
         deleteButton.textContent = 'Delete';
         deleteButton.className = 'delete-btn';
         deleteButton.addEventListener('click', () => {
-            handleDeleteAccount(account.index); // Pass numeric index as per this task's requirement
+            handleDeleteAccount(account.id, account.accountName); 
         });
         actionsCell.appendChild(deleteButton);
     });
@@ -179,12 +237,8 @@ function handleEditAccount(docId) {
     }
 }
 
-function handleDeleteAccount(accountIndex) { // Parameter is numeric index
-    // Find account name for confirmation message (optional but good UX)
-    const accountToDelete = accountsData.find(acc => acc.index === accountIndex);
-    const accountName = accountToDelete ? accountToDelete.accountName : `Index ${accountIndex}`;
-
-    if (!confirm(`Are you sure you want to delete account: ${accountName} (Index: ${accountIndex})?`)) {
+function handleDeleteAccount(docId, accountName) {
+    if (!confirm(`Are you sure you want to delete account: ${accountName} (ID: ${docId})?`)) {
         return;
     }
 
@@ -194,17 +248,15 @@ function handleDeleteAccount(accountIndex) { // Parameter is numeric index
         return;
     }
 
-    const documentId = String(accountIndex); // Convert numeric index to string for Firestore document ID
-
-    db.collection('accounts').doc(documentId).delete()
+    db.collection('accounts').doc(docId).delete()
         .then(() => {
-            console.log(`Account with ID ${documentId} deleted from Firestore successfully.`);
-            accountsData = accountsData.filter(acc => acc.index !== accountIndex); // Filter by numeric index
+            console.log(`Account ${docId} (${accountName}) deleted from Firestore successfully.`);
+            accountsData = accountsData.filter(acc => acc.id !== docId);
             renderAccounts();
-            alert(`Account "${accountName}" (Index: ${accountIndex}) deleted successfully.`);
+            alert(`Account "${accountName}" (ID: ${docId}) deleted successfully.`);
         })
         .catch(error => {
-            console.error(`Error deleting account with ID ${documentId} from Firestore: `, error);
+            console.error(`Error deleting account ${docId} from Firestore: `, error);
             alert(`Failed to delete account "${accountName}". Error: ${error.message}`);
         });
 }
@@ -257,12 +309,10 @@ function handleSaveAccount(event) {
         return;
     }
 
-    if (currentEditIndex !== null) { // Edit Mode (currentEditIndex is Firestore doc ID, string)
+    if (currentEditIndex !== null) { // Edit Mode
         const newDocumentId = String(accountDataObject.index);
         const oldDocumentId = currentEditIndex; 
 
-        // Check if the numeric index value itself has changed for the document ID
-        // And if it has, check for in-memory duplicates for the new numeric index
         if (numericIndex !== parseInt(oldDocumentId, 10)) { 
              const isDuplicateInMemory = accountsData.some(acc => acc.index === numericIndex && acc.id !== oldDocumentId);
              if (isDuplicateInMemory) {
@@ -385,6 +435,15 @@ function handleCalculateStarBonusTime() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Get Auth and Content DOM elements
+    loginButton = document.getElementById('loginButton');
+    logoutButton = document.getElementById('logoutButton');
+    userInfoDiv = document.getElementById('userInfo');
+    accountFormContainer = document.getElementById('accountFormContainer'); 
+    mainTableContainer = document.querySelector('.table-container'); 
+    addNewAccountButtonElem = document.getElementById('addNewAccountButton');
+
+
     try {
         // Initialize Firebase
         if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
@@ -399,18 +458,80 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof firebase.firestore === 'undefined') {
              throw new Error("Firestore SDK not loaded. Ensure firebase-firestore-compat.js is included.");
         }
+         if (typeof firebase.auth === 'undefined') {
+            throw new Error("Firebase Auth SDK not loaded. Ensure firebase-auth-compat.js is included.");
+        }
         db = firebase.firestore();
         console.log("Firebase and Firestore initialized successfully.");
 
-        loadAccountsFromFirestore();
+        // Auth state listener
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                // User is signed in.
+                currentUserUID = user.uid;
+                currentUserEmail = user.email; // Or user.displayName
+                console.log("User signed in:", currentUserEmail);
+
+                if(userInfoDiv) userInfoDiv.textContent = `Logged in as: ${currentUserEmail}`;
+                if(userInfoDiv) userInfoDiv.style.display = 'inline-block'; // or 'block'
+                if(loginButton) loginButton.style.display = 'none';
+                if(logoutButton) logoutButton.style.display = 'inline-block'; // or 'block'
+
+                // Enable/show main app content
+                if(addNewAccountButtonElem) addNewAccountButtonElem.style.display = 'inline-block'; // or 'block'
+                if(mainTableContainer) mainTableContainer.style.display = 'block';
+                // accountFormContainer is controlled by showForm/hideForm
+
+                loadAccountsFromFirestore();
+            } else {
+                // User is signed out.
+                currentUserUID = null;
+                currentUserEmail = null;
+                console.log("User signed out.");
+
+                if(userInfoDiv) userInfoDiv.textContent = '';
+                if(userInfoDiv) userInfoDiv.style.display = 'none';
+                if(loginButton) loginButton.style.display = 'inline-block'; // or 'block'
+                if(logoutButton) logoutButton.style.display = 'none';
+
+                // Disable/hide main app content
+                if(addNewAccountButtonElem) addNewAccountButtonElem.style.display = 'none';
+                if(mainTableContainer) mainTableContainer.style.display = 'none';
+                if(accountFormContainer) accountFormContainer.classList.add('hidden-form'); // Ensure form is hidden
+
+                accountsData = [];
+                renderAccounts(); // Clear the table
+            }
+        });
 
     } catch (error) {
         console.error("Error initializing Firebase/Firestore:", error);
         alert("FATAL ERROR: Could not initialize Firebase or Firestore. App functionality will be severely limited. Check console for details.\nError: " + error.message);
         accountsData = [];
         renderAccounts();
+         // Hide main content if Firebase init fails
+        if(addNewAccountButtonElem) addNewAccountButtonElem.style.display = 'none';
+        if(mainTableContainer) mainTableContainer.style.display = 'none';
+        if(accountFormContainer) accountFormContainer.classList.add('hidden-form');
+        if(loginButton) loginButton.style.display = 'inline-block'; // Show login button
+        if(logoutButton) logoutButton.style.display = 'none';
+        if(userInfoDiv) userInfoDiv.style.display = 'none';
     }
 
+    // Attach Auth event listeners
+    if (loginButton) {
+        loginButton.addEventListener('click', signInWithGoogle);
+    } else {
+        console.error("Login button not found.");
+    }
+    if (logoutButton) {
+        logoutButton.addEventListener('click', signOutUser);
+    } else {
+        console.error("Logout button not found.");
+    }
+
+
+    // Event listeners for other app buttons
     const saveAccountButton = document.getElementById('saveAccountButton');
     if (saveAccountButton) {
         saveAccountButton.addEventListener('click', handleSaveAccount);
@@ -418,9 +539,9 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Save Account Button not found!");
     }
 
-    const addNewAccountButton = document.getElementById('addNewAccountButton');
-    if (addNewAccountButton) {
-        addNewAccountButton.addEventListener('click', () => {
+    const addNewAccountButtonElemListener = document.getElementById('addNewAccountButton'); // Re-fetch for clarity or use addNewAccountButtonElem
+    if (addNewAccountButtonElemListener) {
+        addNewAccountButtonElemListener.addEventListener('click', () => {
             currentEditIndex = null; 
             if (typeof showForm === 'function') {
                 showForm(false); 
@@ -429,7 +550,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     } else {
-        console.error("Add New Account Button not found!");
+        console.error("Add New Account Button (for listener) not found!");
     }
 
     const calculateButton = document.getElementById('calculateStarBonusTimeButton');
