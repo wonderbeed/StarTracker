@@ -158,8 +158,17 @@
             background-color: #007bff; /* Blue */
             padding: 6px 12px;
             font-size: 14px;
+            margin-left: 0px; /* Ensure buttons are close if multiple */
+            margin-right: 5px; /* Space between Edit and Delete */
         }
         #accountsTableBody button:hover { background-color: #0056b3; }
+
+        #accountsTableBody .delete-btn {
+            background-color: #dc3545; /* Red */
+        }
+        #accountsTableBody .delete-btn:hover {
+            background-color: #c82333; /* Darker Red */
+        }
 
         #saveAccountButton {
             background-color: #28a745; /* Darker Green */
