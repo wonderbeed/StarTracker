@@ -1,15 +1,30 @@
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBo9-yj8I_1zZaR37hBERwPQcU5bEFOftg",
+  authDomain: "star-bonus-tracker.firebaseapp.com",
+  projectId: "star-bonus-tracker",
+  storageBucket: "star-bonus-tracker.firebasestorage.app",
+  messagingSenderId: "367118210066",
+  appId: "1:367118210066:web:a0a9e51597fffb351cf4cb",
+  measurementId: "G-Q6MTX3EQ81"
+};
+
+// Firestore instance
+let db;
+
 // Initialize an empty array to store account objects
 let accountsData = [];
-let currentEditIndex = null; // Used to track if we are editing an existing account
+let currentEditIndex = null; // Used to track if we are editing an existing account (Firestore doc ID)
 
 /**
- * Structure of an account object:
+ * Structure of an account object (in-memory representation):
  * {
- *   index: Number,        // Unique identifier for the account
- *   accountName: String,  // Name of the account
- *   starBonusTime: String, // Date and time of the star bonus (e.g., "YYYY-MM-DDTHH:MM")
- *   memo: String,         // Optional memo for the account
- *   notes: String         // Optional additional notes
+ *   id: String,           // Firestore document ID (which is String(index))
+ *   index: Number,        // User-defined numeric index, should be unique
+ *   accountName: String,
+ *   starBonusTime: String, 
+ *   memo: String,
+ *   notes: String
  * }
  */
 
@@ -17,6 +32,44 @@ let currentEditIndex = null; // Used to track if we are editing an existing acco
 window.resetCurrentEditIndex = () => {
     currentEditIndex = null;
 };
+
+function loadAccountsFromFirestore() {
+    if (!db) {
+        console.error("Firestore instance (db) not available. Cannot load accounts.");
+        alert("Error: Database connection not available. Please try refreshing.");
+        accountsData = []; 
+        renderAccounts();
+        return; 
+    }
+
+    db.collection('accounts').get()
+        .then(querySnapshot => {
+            const loadedAccounts = [];
+            querySnapshot.forEach(doc => {
+                const data = doc.data();
+                const account = {
+                    id: doc.id, 
+                    index: parseInt(data.index, 10), 
+                    accountName: data.accountName,
+                    starBonusTime: data.starBonusTime,
+                    memo: data.memo,
+                    notes: data.notes
+                };
+                loadedAccounts.push(account);
+            });
+            accountsData = loadedAccounts;
+            accountsData.sort((a, b) => a.index - b.index); 
+            renderAccounts();
+            console.log(`Successfully loaded ${accountsData.length} accounts from Firestore.`);
+        })
+        .catch(error => {
+            console.error("Error loading accounts from Firestore: ", error);
+            alert("Error loading accounts from the database. Displaying an empty list. Details: " + error.message);
+            accountsData = [];
+            renderAccounts();
+        });
+}
+
 
 function calculateRemainingTime(targetTime) {
     const now = new Date();
@@ -59,13 +112,13 @@ function renderAccounts() {
         return;
     }
     tableBody.innerHTML = ''; 
-    accountsData.sort((a, b) => a.index - b.index);
+    accountsData.sort((a, b) => a.index - b.index); 
 
     accountsData.forEach(account => {
         const row = tableBody.insertRow();
         
         const indexCell = row.insertCell();
-        indexCell.textContent = account.index;
+        indexCell.textContent = account.index; 
         indexCell.className = 'columnIndex';
 
         const nameCell = row.insertCell();
@@ -96,40 +149,78 @@ function renderAccounts() {
 
         const editButton = document.createElement('button');
         editButton.textContent = 'Edit';
-        editButton.dataset.accountId = account.index;
+        editButton.dataset.accountId = account.id; 
         editButton.onclick = function() {
-            handleEditAccount(account.index);
+            handleEditAccount(account.id); 
         };
         actionsCell.appendChild(editButton);
-        // Delete button creation removed
+
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'Delete';
+        deleteButton.className = 'delete-btn';
+        deleteButton.addEventListener('click', () => {
+            handleDeleteAccount(account.index); // Pass numeric index as per this task's requirement
+        });
+        actionsCell.appendChild(deleteButton);
     });
 }
 
-function handleEditAccount(accountIndex) {
-    const accountToEdit = accountsData.find(acc => acc.index === accountIndex);
+function handleEditAccount(docId) { 
+    const accountToEdit = accountsData.find(acc => acc.id === docId );
     if (accountToEdit) {
-        currentEditIndex = accountIndex; 
+        currentEditIndex = docId; 
         if (typeof showForm === 'function') {
-            showForm(true, accountToEdit);
+            showForm(true, accountToEdit); 
         } else {
             console.error("showForm function not found.");
         }
     } else {
-        console.error("Account not found for editing:", accountIndex);
+        console.error("Account not found for editing with docId:", docId);
     }
 }
+
+function handleDeleteAccount(accountIndex) { // Parameter is numeric index
+    // Find account name for confirmation message (optional but good UX)
+    const accountToDelete = accountsData.find(acc => acc.index === accountIndex);
+    const accountName = accountToDelete ? accountToDelete.accountName : `Index ${accountIndex}`;
+
+    if (!confirm(`Are you sure you want to delete account: ${accountName} (Index: ${accountIndex})?`)) {
+        return;
+    }
+
+    if (!db) {
+        alert('Database not initialized. Cannot delete account.');
+        console.error("Database not available for delete operation.");
+        return;
+    }
+
+    const documentId = String(accountIndex); // Convert numeric index to string for Firestore document ID
+
+    db.collection('accounts').doc(documentId).delete()
+        .then(() => {
+            console.log(`Account with ID ${documentId} deleted from Firestore successfully.`);
+            accountsData = accountsData.filter(acc => acc.index !== accountIndex); // Filter by numeric index
+            renderAccounts();
+            alert(`Account "${accountName}" (Index: ${accountIndex}) deleted successfully.`);
+        })
+        .catch(error => {
+            console.error(`Error deleting account with ID ${documentId} from Firestore: `, error);
+            alert(`Failed to delete account "${accountName}". Error: ${error.message}`);
+        });
+}
+
 
 function handleSaveAccount(event) {
     event.preventDefault();
 
     const localFormErrorMessage = document.getElementById('formErrorMessage');
-    const localAccountIndexInput = document.getElementById('accountIndexInput');
+    const localAccountIndexInput = document.getElementById('accountIndexInput'); 
     const localAccountNameInput = document.getElementById('accountNameInput');
     const localAccountStarBonusTimeInput = document.getElementById('accountStarBonusTimeInput');
     const localAccountMemoInput = document.getElementById('accountMemoInput');
     const localAccountNotesInput = document.getElementById('accountNotesInput');
 
-    localFormErrorMessage.textContent = ''; // Clear previous errors
+    localFormErrorMessage.textContent = ''; 
 
     if (!localAccountIndexInput || !localAccountNameInput || !localAccountStarBonusTimeInput || !localAccountMemoInput || !localAccountNotesInput) {
         console.error("Essential form elements not found!");
@@ -137,14 +228,14 @@ function handleSaveAccount(event) {
         return;
     }
 
-    const newNumericIndex = parseInt(localAccountIndexInput.value, 10);
+    const numericIndex = parseInt(localAccountIndexInput.value, 10); 
     const accountName = localAccountNameInput.value.trim();
     const starBonusTime = localAccountStarBonusTimeInput.value;
     const memo = localAccountMemoInput.value.trim();
     const notes = localAccountNotesInput.value.trim();
 
-    if (isNaN(newNumericIndex)) {
-        localFormErrorMessage.textContent = "Error: Index must be a number.";
+    if (isNaN(numericIndex)) {
+        localFormErrorMessage.textContent = "Error: Index (numeric) is required.";
         return;
     }
     if (!accountName) {
@@ -153,48 +244,98 @@ function handleSaveAccount(event) {
     }
 
     const accountDataObject = { 
-        index: newNumericIndex,
+        index: numericIndex,
         accountName: accountName,
         starBonusTime: starBonusTime,
         memo: memo,
         notes: notes
     };
 
-    if (currentEditIndex !== null) { // Edit Mode
-        if (accountDataObject.index !== currentEditIndex) {
-            const isDuplicateInMemory = accountsData.some(acc => acc.index === accountDataObject.index && acc.index !== currentEditIndex);
-            if (isDuplicateInMemory) {
-                localFormErrorMessage.textContent = "Error: This new Index already exists. Please use a unique index.";
+    if (!db) {
+        alert('Database not initialized. Cannot save account.');
+        localFormErrorMessage.textContent = "Database not available. Account not saved.";
+        return;
+    }
+
+    if (currentEditIndex !== null) { // Edit Mode (currentEditIndex is Firestore doc ID, string)
+        const newDocumentId = String(accountDataObject.index);
+        const oldDocumentId = currentEditIndex; 
+
+        // Check if the numeric index value itself has changed for the document ID
+        // And if it has, check for in-memory duplicates for the new numeric index
+        if (numericIndex !== parseInt(oldDocumentId, 10)) { 
+             const isDuplicateInMemory = accountsData.some(acc => acc.index === numericIndex && acc.id !== oldDocumentId);
+             if (isDuplicateInMemory) {
+                localFormErrorMessage.textContent = "Error: This new user-defined Index already exists in current data. Please use a unique index.";
                 return;
             }
         }
-        const accountToUpdate = accountsData.find(acc => acc.index === currentEditIndex);
-        if (accountToUpdate) {
-            accountToUpdate.index = accountDataObject.index;
-            accountToUpdate.accountName = accountDataObject.accountName;
-            accountToUpdate.starBonusTime = accountDataObject.starBonusTime;
-            accountToUpdate.memo = accountDataObject.memo;
-            accountToUpdate.notes = accountDataObject.notes;
+        
+        let firestorePromise;
+
+        if (newDocumentId === oldDocumentId) {
+            firestorePromise = db.collection('accounts').doc(newDocumentId).set(accountDataObject, { merge: true });
         } else {
-            // Should not happen if currentEditIndex is valid
-            localFormErrorMessage.textContent = "Error: Could not find original account to update.";
-            return; 
+            const batch = db.batch();
+            const oldDocRef = db.collection('accounts').doc(oldDocumentId);
+            const newDocRef = db.collection('accounts').doc(newDocumentId);
+            
+            batch.delete(oldDocRef);
+            batch.set(newDocRef, accountDataObject);
+            firestorePromise = batch.commit();
         }
+
+        firestorePromise.then(() => {
+            console.log(`Account updated in Firestore. Old ID: ${oldDocumentId}, New ID: ${newDocumentId}`);
+            const accountIndexInLocalData = accountsData.findIndex(acc => acc.id === oldDocumentId);
+            if (accountIndexInLocalData !== -1) {
+                accountsData.splice(accountIndexInLocalData, 1);
+            }
+            accountsData.push({ ...accountDataObject, id: newDocumentId }); 
+            
+            accountsData.sort((a, b) => a.index - b.index);
+            renderAccounts();
+            if (typeof clearAndHideForm === 'function') {
+                clearAndHideForm(); 
+            }
+            localFormErrorMessage.textContent = '';
+        }).catch(error => {
+            console.error("Error updating account in Firestore: ", error);
+            localFormErrorMessage.textContent = "Failed to update account in database. Error: " + error.message;
+            if (error.code === 'already-exists' || (error.name && error.name === 'FirebaseError' && error.message.includes('ALREADY_EXISTS'))) { 
+                localFormErrorMessage.textContent += " (The new index might already be in use by another account).";
+            }
+        });
+
     } else { // Add Mode
         const isDuplicateInMemory = accountsData.some(acc => acc.index === accountDataObject.index);
         if (isDuplicateInMemory) {
-            localFormErrorMessage.textContent = "Error: Index already exists. Please use a unique index.";
+            localFormErrorMessage.textContent = "Error: User-defined Index already exists in current data. Please use a unique index.";
             return;
         }
-        accountsData.push(accountDataObject);
-    }
 
-    accountsData.sort((a, b) => a.index - b.index);
-    renderAccounts();
-    if (typeof clearAndHideForm === 'function') {
-        clearAndHideForm(); 
+        const documentId = String(accountDataObject.index); 
+
+        db.collection('accounts').doc(documentId).set(accountDataObject)
+            .then(() => {
+                console.log("Account added to Firestore successfully with ID:", documentId);
+                const accountForMemory = { ...accountDataObject, id: documentId };
+                accountsData.push(accountForMemory);
+                accountsData.sort((a, b) => a.index - b.index);
+                renderAccounts();
+                if (typeof clearAndHideForm === 'function') {
+                    clearAndHideForm(); 
+                }
+                localFormErrorMessage.textContent = '';
+            })
+            .catch(error => {
+                console.error("Error adding account to Firestore: ", error);
+                localFormErrorMessage.textContent = "Failed to save account to database. Error: " + error.message;
+                if (error.code === 'already-exists' || (error.name && error.name === 'FirebaseError' && error.message.includes('ALREADY_EXISTS'))) {
+                     localFormErrorMessage.textContent += " (This index already exists in the database).";
+                }
+            });
     }
-    localFormErrorMessage.textContent = '';
 }
 
 function handleCalculateStarBonusTime() {
@@ -213,14 +354,13 @@ function handleCalculateStarBonusTime() {
 
     if (existingStarBonusTimeString) {
         const parsedDate = new Date(existingStarBonusTimeString);
-        // Check if the parsedDate is valid. getTime() returns NaN for invalid dates.
         if (!isNaN(parsedDate.getTime())) {
             baseDate = parsedDate;
         } else {
-            baseDate = new Date(); // Default to now if existing string is invalid
+            baseDate = new Date(); 
         }
     } else {
-        baseDate = new Date(); // Default to now if existing string is empty
+        baseDate = new Date(); 
     }
 
     const days = parseInt(addDaysInput.value, 10) || 0;
@@ -232,30 +372,45 @@ function handleCalculateStarBonusTime() {
     baseDate.setMinutes(baseDate.getMinutes() + minutes);
 
     const year = baseDate.getFullYear();
-    const month = (baseDate.getMonth() + 1).toString().padStart(2, '0'); // Month is 0-indexed
+    const month = (baseDate.getMonth() + 1).toString().padStart(2, '0'); 
     const day = baseDate.getDate().toString().padStart(2, '0');
     const h = baseDate.getHours().toString().padStart(2, '0');
     const m = baseDate.getMinutes().toString().padStart(2, '0');
 
     accountStarBonusTimeInput.value = `${year}-${month}-${day}T${h}:${m}`;
 
-    // Clear the duration input fields
     addDaysInput.value = '';
     addHoursInput.value = '';
     addMinutesInput.value = '';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize with sample data (or empty array if preferred)
-    accountsData = [
-        { index: 1, accountName: "Main Acc (Sample)", starBonusTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0,16), memo: "Primary", notes: "Check daily tasks and events." },
-        { index: 2, accountName: "Alt Acc 1 (Sample)", starBonusTime: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString().slice(0,16), memo: "Secondary", notes: "Less critical." },
-        { index: 3, accountName: "Test Bonus (Sample)", starBonusTime: new Date(Date.now() - 10000).toISOString().slice(0,16), memo: "Expired bonus", notes: "Should be red." }
-    ];
-    renderAccounts();
-    console.log("Application initialized with in-memory data.");
+    try {
+        // Initialize Firebase
+        if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
+            throw new Error("Firebase SDK not loaded. Ensure firebase-app-compat.js is included.");
+        }
+        if (!firebase.apps.length) { 
+            firebase.initializeApp(firebaseConfig);
+        } else {
+            firebase.app(); 
+        }
+        
+        if (typeof firebase.firestore === 'undefined') {
+             throw new Error("Firestore SDK not loaded. Ensure firebase-firestore-compat.js is included.");
+        }
+        db = firebase.firestore();
+        console.log("Firebase and Firestore initialized successfully.");
 
-    // Event listeners for buttons
+        loadAccountsFromFirestore();
+
+    } catch (error) {
+        console.error("Error initializing Firebase/Firestore:", error);
+        alert("FATAL ERROR: Could not initialize Firebase or Firestore. App functionality will be severely limited. Check console for details.\nError: " + error.message);
+        accountsData = [];
+        renderAccounts();
+    }
+
     const saveAccountButton = document.getElementById('saveAccountButton');
     if (saveAccountButton) {
         saveAccountButton.addEventListener('click', handleSaveAccount);
