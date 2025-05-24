@@ -208,23 +208,38 @@ function handleCalculateStarBonusTime() {
         return;
     }
 
+    const existingStarBonusTimeString = accountStarBonusTimeInput.value;
+    let baseDate;
+
+    if (existingStarBonusTimeString) {
+        const parsedDate = new Date(existingStarBonusTimeString);
+        // Check if the parsedDate is valid. getTime() returns NaN for invalid dates.
+        if (!isNaN(parsedDate.getTime())) {
+            baseDate = parsedDate;
+        } else {
+            baseDate = new Date(); // Default to now if existing string is invalid
+        }
+    } else {
+        baseDate = new Date(); // Default to now if existing string is empty
+    }
+
     const days = parseInt(addDaysInput.value, 10) || 0;
     const hours = parseInt(addHoursInput.value, 10) || 0;
     const minutes = parseInt(addMinutesInput.value, 10) || 0;
 
-    const now = new Date();
-    now.setDate(now.getDate() + days);
-    now.setHours(now.getHours() + hours);
-    now.setMinutes(now.getMinutes() + minutes);
+    baseDate.setDate(baseDate.getDate() + days);
+    baseDate.setHours(baseDate.getHours() + hours);
+    baseDate.setMinutes(baseDate.getMinutes() + minutes);
 
-    const year = now.getFullYear();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const day = now.getDate().toString().padStart(2, '0');
-    const h = now.getHours().toString().padStart(2, '0');
-    const m = now.getMinutes().toString().padStart(2, '0');
+    const year = baseDate.getFullYear();
+    const month = (baseDate.getMonth() + 1).toString().padStart(2, '0'); // Month is 0-indexed
+    const day = baseDate.getDate().toString().padStart(2, '0');
+    const h = baseDate.getHours().toString().padStart(2, '0');
+    const m = baseDate.getMinutes().toString().padStart(2, '0');
 
     accountStarBonusTimeInput.value = `${year}-${month}-${day}T${h}:${m}`;
 
+    // Clear the duration input fields
     addDaysInput.value = '';
     addHoursInput.value = '';
     addMinutesInput.value = '';
