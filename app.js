@@ -308,6 +308,11 @@ function handleSaveAccount(event) {
         localFormErrorMessage.textContent = "Database not available. Account not saved.";
         return;
     }
+    if (!currentUserUID) { // Added explicit check
+        alert('You must be logged in to save accounts.');
+        localFormErrorMessage.textContent = "User not logged in. Account not saved.";
+        return;
+    }
 
     if (currentEditIndex !== null) { // Edit Mode
         const newDocumentId = String(accountDataObject.index);
@@ -358,12 +363,6 @@ function handleSaveAccount(event) {
         });
 
     } else { // Add Mode
-      console.log(
-  '[DEBUG][Add] Saving new account -', 
-  'User:', currentUserUID, 
-  'Data:', accountDataObject,
-  'Firestore initialized:', !!db
-);
         const isDuplicateInMemory = accountsData.some(acc => acc.index === accountDataObject.index);
         if (isDuplicateInMemory) {
             localFormErrorMessage.textContent = "Error: User-defined Index already exists in current data. Please use a unique index.";
@@ -372,6 +371,7 @@ function handleSaveAccount(event) {
 
         const documentId = String(accountDataObject.index); 
 
+        // Removed [DEBUG] console.log for Add Mode
         db.collection('accounts').doc(documentId).set(accountDataObject)
             .then(() => {
                 console.log("Account added to Firestore successfully with ID:", documentId);
