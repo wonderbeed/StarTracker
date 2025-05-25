@@ -358,6 +358,12 @@ function handleSaveAccount(event) {
         });
 
     } else { // Add Mode
+      console.log(
+  '[DEBUG][Add] Saving new account -', 
+  'User:', currentUserUID, 
+  'Data:', accountDataObject,
+  'Firestore initialized:', !!db
+);
         const isDuplicateInMemory = accountsData.some(acc => acc.index === accountDataObject.index);
         if (isDuplicateInMemory) {
             localFormErrorMessage.textContent = "Error: User-defined Index already exists in current data. Please use a unique index.";
