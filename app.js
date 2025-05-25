@@ -85,8 +85,6 @@ function signOutUser() {
 function loadAccountsFromFirestore() {
     if (!db) {
         console.error("Firestore instance (db) not available. Cannot load accounts.");
-        // This function is now called by onAuthStateChanged, so db should be available if user is logged in.
-        // If it's not, it's a more fundamental issue than just not being logged in.
         accountsData = []; 
         renderAccounts();
         return; 
@@ -98,9 +96,7 @@ function loadAccountsFromFirestore() {
         return;
     }
 
-    // Firestore data loading will be user-specific in a later task.
-    // For now, it loads from a general 'accounts' collection.
-    db.collection('accounts').get()
+    db.collection('users').doc(currentUserUID).collection('accounts').get()
         .then(querySnapshot => {
             const loadedAccounts = [];
             querySnapshot.forEach(doc => {
@@ -118,10 +114,10 @@ function loadAccountsFromFirestore() {
             accountsData = loadedAccounts;
             accountsData.sort((a, b) => a.index - b.index); 
             renderAccounts();
-            console.log(`Successfully loaded ${accountsData.length} accounts from Firestore.`);
+            console.log(`Successfully loaded ${accountsData.length} accounts from Firestore for user ${currentUserUID}.`);
         })
         .catch(error => {
-            console.error("Error loading accounts from Firestore: ", error);
+            console.error(`Error loading accounts from Firestore for user ${currentUserUID}: `, error);
             alert("Error loading accounts from the database. Displaying an empty list. Details: " + error.message);
             accountsData = [];
             renderAccounts();
@@ -165,61 +161,136 @@ function calculateRemainingTime(targetTime) {
 
 function renderAccounts() {
     const tableBody = document.getElementById('accountsTableBody');
+    const cardDisplayArea = document.getElementById('cardDisplayArea');
+
     if (!tableBody) {
         console.error("Table body 'accountsTableBody' not found!");
-        return;
+        // If table body isn't found, card area might also be problematic or not relevant
+        // but we'll check for cardDisplayArea separately.
     }
-    tableBody.innerHTML = ''; 
+    if (!cardDisplayArea) {
+        console.error("Card display area 'cardDisplayArea' not found!");
+    }
+
+    // Clear existing content
+    if (tableBody) tableBody.innerHTML = ''; 
+    if (cardDisplayArea) cardDisplayArea.innerHTML = '';
+
     accountsData.sort((a, b) => a.index - b.index); 
 
     accountsData.forEach(account => {
-        const row = tableBody.insertRow();
-        
-        const indexCell = row.insertCell();
-        indexCell.textContent = account.index; 
-        indexCell.className = 'columnIndex';
+        // --- Existing Table Row Rendering ---
+        if (tableBody) {
+            const row = tableBody.insertRow();
+            
+            const indexCell = row.insertCell();
+            indexCell.textContent = account.index; 
+            indexCell.className = 'columnIndex';
 
-        const nameCell = row.insertCell();
-        nameCell.textContent = account.accountName;
+            const nameCell = row.insertCell();
+            nameCell.textContent = account.accountName;
 
-        const starBonusCell = row.insertCell();
-        starBonusCell.textContent = account.starBonusTime ? new Date(account.starBonusTime).toLocaleString() : 'N/A';
+            const starBonusCell = row.insertCell();
+            starBonusCell.textContent = account.starBonusTime ? new Date(account.starBonusTime).toLocaleString() : 'N/A';
 
-        const memoCell = row.insertCell();
-        memoCell.textContent = account.memo || '';
+            const memoCell = row.insertCell();
+            memoCell.textContent = account.memo || '';
 
-        const remainingTimeCell = row.insertCell();
-        if (account.starBonusTime) {
-            const remaining = calculateRemainingTime(account.starBonusTime);
-            remainingTimeCell.textContent = remaining.text;
-            remainingTimeCell.className = remaining.class;
-        } else {
-            remainingTimeCell.textContent = 'N/A';
-            remainingTimeCell.className = 'normal';
+            const remainingTimeCell = row.insertCell();
+            if (account.starBonusTime) {
+                const remaining = calculateRemainingTime(account.starBonusTime);
+                remainingTimeCell.textContent = remaining.text;
+                remainingTimeCell.className = remaining.class;
+            } else {
+                remainingTimeCell.textContent = 'N/A';
+                remainingTimeCell.className = 'normal';
+            }
+
+            const notesCell = row.insertCell(); // Still created, but hidden by CSS
+            notesCell.textContent = account.notes || '';
+            notesCell.className = 'columnNotes';
+
+            const actionsCell = row.insertCell();
+            actionsCell.style.whiteSpace = 'nowrap'; 
+
+            const editButton = document.createElement('button');
+            editButton.textContent = 'Edit';
+            editButton.dataset.accountId = account.id; 
+            editButton.onclick = function() {
+                handleEditAccount(account.id); 
+            };
+            actionsCell.appendChild(editButton);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Delete';
+            deleteButton.className = 'delete-btn';
+            deleteButton.addEventListener('click', () => {
+                handleDeleteAccount(account.id, account.accountName); 
+            });
+            actionsCell.appendChild(deleteButton);
         }
 
-        const notesCell = row.insertCell();
-        notesCell.textContent = account.notes || '';
-        notesCell.className = 'columnNotes';
+        // --- New Card Rendering ---
+        if (cardDisplayArea) {
+            const card = document.createElement('div');
+            card.className = 'account-card';
+            card.dataset.accountId = account.id;
 
-        const actionsCell = row.insertCell();
-        actionsCell.style.whiteSpace = 'nowrap'; 
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'card-field';
+            nameDiv.innerHTML = `<strong>Account Name:</strong> ${account.accountName}`;
+            card.appendChild(nameDiv);
+            
+            // User-defined Index (optional to show in card, but good for reference)
+            const indexDiv = document.createElement('div');
+            indexDiv.className = 'card-field';
+            indexDiv.innerHTML = `<strong>Index:</strong> ${account.index}`;
+            card.appendChild(indexDiv);
 
-        const editButton = document.createElement('button');
-        editButton.textContent = 'Edit';
-        editButton.dataset.accountId = account.id; 
-        editButton.onclick = function() {
-            handleEditAccount(account.id); 
-        };
-        actionsCell.appendChild(editButton);
+            const starBonusDiv = document.createElement('div');
+            starBonusDiv.className = 'card-field';
+            starBonusDiv.innerHTML = `<strong>Star Bonus:</strong> ${account.starBonusTime ? new Date(account.starBonusTime).toLocaleString() : 'N/A'}`;
+            card.appendChild(starBonusDiv);
 
-        const deleteButton = document.createElement('button');
-        deleteButton.textContent = 'Delete';
-        deleteButton.className = 'delete-btn';
-        deleteButton.addEventListener('click', () => {
-            handleDeleteAccount(account.id, account.accountName); 
-        });
-        actionsCell.appendChild(deleteButton);
+            const memoDiv = document.createElement('div');
+            memoDiv.className = 'card-field';
+            memoDiv.innerHTML = `<strong>Memo:</strong> ${account.memo || ''}`;
+            card.appendChild(memoDiv);
+
+            const remainingTimeDiv = document.createElement('div');
+            remainingTimeDiv.className = 'card-field';
+            if (account.starBonusTime) {
+                const remaining = calculateRemainingTime(account.starBonusTime);
+                remainingTimeDiv.innerHTML = `<strong>Remaining:</strong> <span class="${remaining.class}">${remaining.text}</span>`;
+            } else {
+                remainingTimeDiv.innerHTML = '<strong>Remaining:</strong> N/A';
+            }
+            card.appendChild(remainingTimeDiv);
+            
+            // Notes (optional to show in card)
+            const notesDiv = document.createElement('div');
+            notesDiv.className = 'card-field';
+            notesDiv.innerHTML = `<strong>Notes:</strong> ${account.notes || ''}`;
+            card.appendChild(notesDiv);
+
+
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'actions';
+
+            const editButtonCard = document.createElement('button');
+            editButtonCard.textContent = 'Edit';
+            editButtonCard.onclick = function() { handleEditAccount(account.id); };
+            actionsDiv.appendChild(editButtonCard);
+
+            const deleteButtonCard = document.createElement('button');
+            deleteButtonCard.textContent = 'Delete';
+            deleteButtonCard.className = 'delete-btn'; // Reuse existing class for styling
+            deleteButtonCard.addEventListener('click', () => { handleDeleteAccount(account.id, account.accountName); });
+            actionsDiv.appendChild(deleteButtonCard);
+
+            card.appendChild(actionsDiv);
+            cardDisplayArea.appendChild(card);
+        }
     });
 }
 
@@ -242,21 +313,21 @@ function handleDeleteAccount(docId, accountName) {
         return;
     }
 
-    if (!db) {
-        alert('Database not initialized. Cannot delete account.');
-        console.error("Database not available for delete operation.");
+    if (!db || !currentUserUID) {
+        alert('Database not available or user not logged in. Cannot delete account.');
+        console.error("Database or user not available for delete operation.");
         return;
     }
 
-    db.collection('accounts').doc(docId).delete()
+    db.collection('users').doc(currentUserUID).collection('accounts').doc(docId).delete()
         .then(() => {
-            console.log(`Account ${docId} (${accountName}) deleted from Firestore successfully.`);
+            console.log(`Account ${docId} (${accountName}) deleted from Firestore successfully for user ${currentUserUID}.`);
             accountsData = accountsData.filter(acc => acc.id !== docId);
             renderAccounts();
             alert(`Account "${accountName}" (ID: ${docId}) deleted successfully.`);
         })
         .catch(error => {
-            console.error(`Error deleting account ${docId} from Firestore: `, error);
+            console.error(`Error deleting account ${docId} from Firestore for user ${currentUserUID}: `, error);
             alert(`Failed to delete account "${accountName}". Error: ${error.message}`);
         });
 }
@@ -303,14 +374,9 @@ function handleSaveAccount(event) {
         notes: notes
     };
 
-    if (!db) {
-        alert('Database not initialized. Cannot save account.');
-        localFormErrorMessage.textContent = "Database not available. Account not saved.";
-        return;
-    }
-    if (!currentUserUID) { // Added explicit check
-        alert('You must be logged in to save accounts.');
-        localFormErrorMessage.textContent = "User not logged in. Account not saved.";
+    if (!db || !currentUserUID) {
+        alert('Database not available or user not logged in. Cannot save account.');
+        localFormErrorMessage.textContent = "Database/User not available. Account not saved.";
         return;
     }
 
@@ -327,13 +393,14 @@ function handleSaveAccount(event) {
         }
         
         let firestorePromise;
+        const accountsCollectionRef = db.collection('users').doc(currentUserUID).collection('accounts');
 
         if (newDocumentId === oldDocumentId) {
-            firestorePromise = db.collection('accounts').doc(newDocumentId).set(accountDataObject, { merge: true });
+            firestorePromise = accountsCollectionRef.doc(newDocumentId).set(accountDataObject, { merge: true });
         } else {
             const batch = db.batch();
-            const oldDocRef = db.collection('accounts').doc(oldDocumentId);
-            const newDocRef = db.collection('accounts').doc(newDocumentId);
+            const oldDocRef = accountsCollectionRef.doc(oldDocumentId);
+            const newDocRef = accountsCollectionRef.doc(newDocumentId);
             
             batch.delete(oldDocRef);
             batch.set(newDocRef, accountDataObject);
@@ -341,7 +408,7 @@ function handleSaveAccount(event) {
         }
 
         firestorePromise.then(() => {
-            console.log(`Account updated in Firestore. Old ID: ${oldDocumentId}, New ID: ${newDocumentId}`);
+            console.log(`Account updated in Firestore for user ${currentUserUID}. Old ID: ${oldDocumentId}, New ID: ${newDocumentId}`);
             const accountIndexInLocalData = accountsData.findIndex(acc => acc.id === oldDocumentId);
             if (accountIndexInLocalData !== -1) {
                 accountsData.splice(accountIndexInLocalData, 1);
@@ -355,7 +422,7 @@ function handleSaveAccount(event) {
             }
             localFormErrorMessage.textContent = '';
         }).catch(error => {
-            console.error("Error updating account in Firestore: ", error);
+            console.error(`Error updating account in Firestore for user ${currentUserUID}: `, error);
             localFormErrorMessage.textContent = "Failed to update account in database. Error: " + error.message;
             if (error.code === 'already-exists' || (error.name && error.name === 'FirebaseError' && error.message.includes('ALREADY_EXISTS'))) { 
                 localFormErrorMessage.textContent += " (The new index might already be in use by another account).";
@@ -371,10 +438,9 @@ function handleSaveAccount(event) {
 
         const documentId = String(accountDataObject.index); 
 
-        // Removed [DEBUG] console.log for Add Mode
-        db.collection('accounts').doc(documentId).set(accountDataObject)
+        db.collection('users').doc(currentUserUID).collection('accounts').doc(documentId).set(accountDataObject)
             .then(() => {
-                console.log("Account added to Firestore successfully with ID:", documentId);
+                console.log("Account added to Firestore successfully with ID:", documentId, "for user:", currentUserUID);
                 const accountForMemory = { ...accountDataObject, id: documentId };
                 accountsData.push(accountForMemory);
                 accountsData.sort((a, b) => a.index - b.index);
@@ -385,7 +451,7 @@ function handleSaveAccount(event) {
                 localFormErrorMessage.textContent = '';
             })
             .catch(error => {
-                console.error("Error adding account to Firestore: ", error);
+                console.error(`Error adding account to Firestore for user ${currentUserUID}: `, error);
                 localFormErrorMessage.textContent = "Failed to save account to database. Error: " + error.message;
                 if (error.code === 'already-exists' || (error.name && error.name === 'FirebaseError' && error.message.includes('ALREADY_EXISTS'))) {
                      localFormErrorMessage.textContent += " (This index already exists in the database).";
@@ -473,40 +539,36 @@ document.addEventListener('DOMContentLoaded', () => {
         // Auth state listener
         firebase.auth().onAuthStateChanged(user => {
             if (user) {
-                // User is signed in.
                 currentUserUID = user.uid;
-                currentUserEmail = user.email; // Or user.displayName
+                currentUserEmail = user.email; 
                 console.log("User signed in:", currentUserEmail);
 
                 if(userInfoDiv) userInfoDiv.textContent = `Logged in as: ${currentUserEmail}`;
-                if(userInfoDiv) userInfoDiv.style.display = 'inline-block'; // or 'block'
+                if(userInfoDiv) userInfoDiv.style.display = 'inline-block'; 
                 if(loginButton) loginButton.style.display = 'none';
-                if(logoutButton) logoutButton.style.display = 'inline-block'; // or 'block'
+                if(logoutButton) logoutButton.style.display = 'inline-block'; 
 
-                // Enable/show main app content
-                if(addNewAccountButtonElem) addNewAccountButtonElem.style.display = 'inline-block'; // or 'block'
-                if(mainTableContainer) mainTableContainer.style.display = 'block';
-                // accountFormContainer is controlled by showForm/hideForm
-
+                if(addNewAccountButtonElem) addNewAccountButtonElem.style.display = 'inline-block'; 
+                // Table/Card visibility is handled by CSS media queries, but container should be block
+                if(mainTableContainer) mainTableContainer.style.display = 'block'; 
+                
                 loadAccountsFromFirestore();
             } else {
-                // User is signed out.
                 currentUserUID = null;
                 currentUserEmail = null;
                 console.log("User signed out.");
 
                 if(userInfoDiv) userInfoDiv.textContent = '';
                 if(userInfoDiv) userInfoDiv.style.display = 'none';
-                if(loginButton) loginButton.style.display = 'inline-block'; // or 'block'
+                if(loginButton) loginButton.style.display = 'inline-block'; 
                 if(logoutButton) logoutButton.style.display = 'none';
 
-                // Disable/hide main app content
                 if(addNewAccountButtonElem) addNewAccountButtonElem.style.display = 'none';
                 if(mainTableContainer) mainTableContainer.style.display = 'none';
-                if(accountFormContainer) accountFormContainer.classList.add('hidden-form'); // Ensure form is hidden
+                if(accountFormContainer) accountFormContainer.classList.add('hidden-form'); 
 
                 accountsData = [];
-                renderAccounts(); // Clear the table
+                renderAccounts(); 
             }
         });
 
@@ -515,11 +577,10 @@ document.addEventListener('DOMContentLoaded', () => {
         alert("FATAL ERROR: Could not initialize Firebase or Firestore. App functionality will be severely limited. Check console for details.\nError: " + error.message);
         accountsData = [];
         renderAccounts();
-         // Hide main content if Firebase init fails
         if(addNewAccountButtonElem) addNewAccountButtonElem.style.display = 'none';
         if(mainTableContainer) mainTableContainer.style.display = 'none';
         if(accountFormContainer) accountFormContainer.classList.add('hidden-form');
-        if(loginButton) loginButton.style.display = 'inline-block'; // Show login button
+        if(loginButton) loginButton.style.display = 'inline-block'; 
         if(logoutButton) logoutButton.style.display = 'none';
         if(userInfoDiv) userInfoDiv.style.display = 'none';
     }
@@ -545,7 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Save Account Button not found!");
     }
 
-    const addNewAccountButtonElemListener = document.getElementById('addNewAccountButton'); // Re-fetch for clarity or use addNewAccountButtonElem
+    const addNewAccountButtonElemListener = document.getElementById('addNewAccountButton'); 
     if (addNewAccountButtonElemListener) {
         addNewAccountButtonElemListener.addEventListener('click', () => {
             currentEditIndex = null; 
